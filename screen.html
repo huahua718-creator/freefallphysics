@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>大屏多功能接收端 - 物理大屏遙控版</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html { width: 100%; height: 100%; overflow: hidden; font-family: sans-serif; background: #000; color: #fff; position: relative; }
+    
+    /* 待機 QR Code 畫面 */
+    #qrcode-view { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center; }
+    .pin-code { font-size: 4rem; font-weight: bold; color: #4dabf7; letter-spacing: 5px; margin: 10px 0; }
+    #qrcode { background: #fff; padding: 15px; border-radius: 12px; margin: 15px 0; }
+    
+    /* 各顯示容器 */
+    #iframe-view, #photo-view, #video-container { 
+      display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; border: none; background: #000; z-index: 10;
+    }
+    #photo-view { object-fit: contain; }
+    #remote-video { width: 100%; height: 100%; object-fit: contain; }
+    .live-badge { position: absolute; top: 20px; left: 20px; background: rgba(255, 59, 48, 0.9); color: white; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; z-index: 20; }
+    
+    /* 畫筆標註層 */
+    #annotation-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 99; }
+
+    /* 重置浮動按鈕 */
+    #reset-btn { position: fixed; bottom: 20px; right: 20px; z-index: 999; background: rgba(0,0,0,0.8); color: white; border: 1px solid #555; padding: 10px 20px; border-radius: 20px; cursor: pointer; display: none; }
+    
+    /* 🌟 大屏物理遙控與背景幕專用 UI */
+    #physics-control-panel { 
+      position: fixed; top: 20px; right: 20px; z-index: 900; background: rgba(28, 28, 30, 0.9); 
+      padding: 15px 20px; border-radius: 16px; border: 1px solid #444; width: 320px; backdrop-filter: blur(10px);
+    }
+    #physics-control-panel h3 { font-size: 1.1rem; margin-bottom: 10px; color: #4dabf7; text-align: center; }
+    .mode-btn-group { display: flex; gap: 8px; margin-bottom: 12px; }
+    .mode-btn { flex: 1; padding: 8px; background: #333; color: #ccc; border: 1px solid #555; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: bold; }
+    .mode-btn.active { background: #007aff; color: #fff; border-color: #007aff; }
+    .start-rec-btn { width: 100%; padding: 12px; background: #34c759; color: white; border: none; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+
+    /* 倒數計時與全黑/藍點背景幕 */
+    #countdown-overlay { 
+      display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+      background: #000; z-index: 950; justify-content: center; align-items: center; 
+      font-size: 12rem; font-weight: bold; color: #4dabf7; user-select: none;
+    }
+    #recording-backdrop { 
+      display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+      background: #000; z-index: 940; cursor: pointer;
+    }
+    #blue-ref-dot { 
+      position: absolute; top: 40px; left: 40px; width: 35px; height: 35px; 
+      background: #007aff; border-radius: 50%; box-shadow: 0 0 15px #007aff; display: none;
+    }
+    .recording-hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: #666; font-size: 1.2rem; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+  <!-- 待機 QR Code 畫面 -->
+  <div id="qrcode-view">
+    <h2>班務大屏傳屏助手</h2>
+    <p style="color: #aaa; margin-top: 5px;">大屏連線配對碼</p>
+    <div class="pin-code" id="pin-display">------</div>
+    <div id="qrcode"></div>
+    <p>請用手機掃描 QR Code 連線配對</p>
+  </div>
+
+  <!-- 各模式顯示容器 -->
+  <iframe id="iframe-view" src="about:blank"></iframe>
+  <img id="photo-view" src="" alt="推送的照片">
+
+  <div id="video-container">
+    <div class="live-badge" id="stream-type-tag">🔴 實況傳輸中</div>
+    <video id="remote-video" autoplay playsinline muted controls></video>
+  </div>
+
+  <!-- 🌟 大屏遙控操作面板 -->
+  <div id="physics-control-panel">
+    <h3>⚛️ 物理大屏互動實驗</h3>
+    <div class="mode-btn-group">
+      <button class="mode-btn active" id="mode-bgsub-btn" onclick="selectPhysicsMode('bgSub')">📐 純黑去背幕</button>
+      <button class="mode-btn" id="mode-refpoint-btn" onclick="selectPhysicsMode('refPoint')">📍 藍點基準幕</button>
+    </div>
+    <button class="start-rec-btn" onclick="triggerCountdown()">🎬 開始倒數錄影</button>
+  </div>
+
+  <!-- 🌟 倒數計時 Overlay -->
+  <div id="countdown-overlay">3</div>
+
+  <!-- 🌟 錄影全黑/藍點背景幕 (點擊螢幕即可結束) -->
+  <div id="recording-backdrop" onclick="stopPhysicsRecording()">
+    <div id="blue-ref-dot"></div>
+    <div class="recording-hint">🎥 實驗進行中... (點擊大屏任意處結束錄影並產生分析)</div>
+  </div>
+
+  <!-- 透明畫筆標註層 -->
+  <canvas id="annotation-canvas"></canvas>
+
+  <button id="reset-btn" onclick="resetScreen()">結束並返回待機</button>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, onValue, set, push, onChildAdded, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBl2Mtn9p8iAloAwPkS_4GxfSGZF-pFPGQ",
+      authDomain: "physics-free-fall.firebaseapp.com",
+      databaseURL: "https://physics-free-fall-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "physics-free-fall"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const urlParams = new URLSearchParams(window.location.search);
+    let screenId = urlParams.get('id') || Math.floor(100000 + Math.random() * 900000).toString();
+    window.history.replaceState(null, '', `?id=${screenId}`);
+
+    document.getElementById('pin-display').innerText = screenId;
+    const mobileUrl = `${window.location.origin}/mobile.html?id=${screenId}`;
+    new QRCode(document.getElementById("qrcode"), { text: mobileUrl, width: 200, height: 200 });
+
+    const canvas = document.getElementById('annotation-canvas');
+    const ctx = canvas.getContext('2d');
+    function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const screenRef = ref(db, 'screens/' + screenId);
+    let peerConnection = null;
+    let selectedMode = 'bgSub';
+    const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+    // 1. 監聽模式與內容變更
+    onValue(screenRef, async (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      if (data.mode === 'url' && data.url) {
+        closeWebRTC(); showView('iframe');
+        document.getElementById('iframe-view').src = formatEmbedUrl(data.url);
+      } else if (data.mode === 'photo' && data.photoUrl) {
+        closeWebRTC(); showView('photo');
+        document.getElementById('photo-view').src = data.photoUrl;
+      } else if (data.mode === 'webrtc' && data.offer) {
+        showView('video');
+        document.getElementById('stream-type-tag').innerText = data.mediaType === 'mic' ? '🎙️ 無線麥克風廣播中' : '🎥 物理運動實況中';
+        await handleWebRTCOffer(data.offer);
+      } else if (data.mode === 'idle') {
+        resetUI();
+      }
+    });
+
+    function formatEmbedUrl(url) {
+      if (!url) return url;
+      const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([\w-]{11})/);
+      return ytMatch && ytMatch[1] ? `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1` : url;
+    }
+
+    /* 🌟 反向控制：大屏遙控手機邏輯 */
+    window.selectPhysicsMode = function(mode) {
+      selectedMode = mode;
+      document.getElementById('mode-bgsub-btn').classList.toggle('active', mode === 'bgSub');
+      document.getElementById('mode-refpoint-btn').classList.toggle('active', mode === 'refPoint');
+    };
+
+    window.triggerCountdown = function() {
+      const countdownOverlay = document.getElementById('countdown-overlay');
+      countdownOverlay.style.display = 'flex';
+      let count = 3;
+      countdownOverlay.innerText = count;
+
+      // 發送指令給手機準備錄影
+      set(ref(db, `screens/${screenId}/physicsControl`), { state: 'countdown', mode: selectedMode, t: Date.now() });
+
+      const timer = setInterval(() => {
+        count--;
+        if (count > 0) {
+          countdownOverlay.innerText = count;
+        } else {
+          clearInterval(timer);
+          countdownOverlay.style.display = 'none';
+          startRecordingBackdrop();
+        }
+      }, 1000);
+    };
+
+    function startRecordingBackdrop() {
+      const backdrop = document.getElementById('recording-backdrop');
+      const blueDot = document.getElementById('blue-ref-dot');
+      backdrop.style.display = 'block';
+      blueDot.style.display = selectedMode === 'refPoint' ? 'block' : 'none';
+
+      // 指令：通知手機正式開始錄影與即時影像處理
+      set(ref(db, `screens/${screenId}/physicsControl`), { state: 'recording', mode: selectedMode, t: Date.now() });
+    }
+
+    window.stopPhysicsRecording = function() {
+      document.getElementById('recording-backdrop').style.display = 'none';
+      // 指令：通知手機停止錄影並傳送最終分析結果
+      set(ref(db, `screens/${screenId}/physicsControl`), { state: 'stop', t: Date.now() });
+    };
+
+    /* 2. 畫筆與 WebRTC 監聽 */
+    const drawEventsRef = ref(db, `screens/${screenId}/drawEvents`);
+    onChildAdded(drawEventsRef, (snapshot) => {
+      const d = snapshot.val();
+      if (d) {
+        ctx.beginPath();
+        ctx.moveTo(d.x0 * canvas.width, d.y0 * canvas.height);
+        ctx.lineTo(d.x1 * canvas.width, d.y1 * canvas.height);
+        if (d.isEraser) {
+          ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = d.size || 20;
+        } else {
+          ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = d.color; ctx.lineWidth = d.size || 4;
+        }
+        ctx.lineCap = 'round'; ctx.stroke(); ctx.globalCompositeOperation = 'source-over';
+      }
+    });
+
+    onValue(drawEventsRef, (snapshot) => {
+      if (!snapshot.exists()) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+
+    async function handleWebRTCOffer(offer) {
+      if (peerConnection) return;
+      peerConnection = new RTCPeerConnection(rtcConfig);
+      peerConnection.ontrack = (event) => {
+        const remoteVideo = document.getElementById('remote-video');
+        if (remoteVideo.srcObject !== event.streams[0]) {
+          remoteVideo.srcObject = event.streams[0];
+          remoteVideo.play().catch(e => console.log(e));
+        }
+      };
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) push(ref(db, `screens/${screenId}/calleeCandidates`), event.candidate.toJSON());
+      };
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      set(ref(db, `screens/${screenId}/answer`), { type: answer.type, sdp: answer.sdp });
+
+      onChildAdded(ref(db, `screens/${screenId}/callerCandidates`), (snapshot) => {
+        if (snapshot.val()) peerConnection.addIceCandidate(new RTCIceCandidate(snapshot.val()));
+      });
+    }
+
+    function closeWebRTC() {
+      if (peerConnection) { peerConnection.close(); peerConnection = null; }
+      const remoteVideo = document.getElementById('remote-video');
+      if (remoteVideo.srcObject) {
+        remoteVideo.srcObject.getTracks().forEach(track => track.stop());
+        remoteVideo.srcObject = null;
+      }
+    }
+
+    function showView(type) {
+      document.getElementById('qrcode-view').style.display = 'none';
+      document.getElementById('iframe-view').style.display = type === 'iframe' ? 'block' : 'none';
+      document.getElementById('photo-view').style.display = type === 'photo' ? 'block' : 'none';
+      document.getElementById('video-container').style.display = type === 'video' ? 'block' : 'none';
+      document.getElementById('reset-btn').style.display = 'block';
+    }
+
+    function resetUI() {
+      closeWebRTC(); ctx.clearRect(0, 0, canvas.width, canvas.height);
+      document.getElementById('iframe-view').src = "about:blank";
+      document.getElementById('photo-view').src = "";
+      document.getElementById('iframe-view').style.display = 'none';
+      document.getElementById('photo-view').style.display = 'none';
+      document.getElementById('video-container').style.display = 'none';
+      document.getElementById('qrcode-view').style.display = 'flex';
+      document.getElementById('reset-btn').style.display = 'none';
+    }
+
+    window.resetScreen = function() {
+      remove(screenRef); set(screenRef, { mode: 'idle' }); resetUI();
+    };
+  </script>
+</body>
+</html>
