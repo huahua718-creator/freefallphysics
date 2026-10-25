@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>傳屏遙控器 - 大屏反向控制版</title>
+  <title>物理運動分析控制器</title>
   <style>
     body { font-family: sans-serif; padding: 12px; background: #f2f2f7; color: #333; margin: 0; }
     .card { background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 12px; }
     label { font-size: 0.85rem; color: #666; font-weight: bold; display: block; margin-bottom: 6px; }
     input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; font-size: 0.95rem; }
     
-    .nav-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
-    .tab-btn { flex: 1; padding: 10px 2px; font-size: 0.75rem; border: none; background: #e5e5ea; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    .nav-tabs { display: flex; gap: 4px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 4px; }
+    .tab-btn { flex: 0 0 auto; padding: 10px 10px; font-size: 0.75rem; border: none; background: #e5e5ea; border-radius: 8px; font-weight: bold; cursor: pointer; white-space: nowrap; }
     .tab-btn.active { background: #007aff; color: white; }
     
     .tab-content { display: none; }
@@ -22,7 +22,7 @@
     button.stop-btn { background: #ff3b30; }
 
     #draw-pad, #physics-output-canvas { 
-      width: 100%; height: 280px; background-color: #000; background-size: contain; 
+      width: 100%; height: 260px; background-color: #000; background-size: contain; 
       background-repeat: no-repeat; background-position: center; border-radius: 8px; 
       touch-action: none; border: 1px solid #333;
     }
@@ -34,6 +34,9 @@
 
     .status-badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; background: #e5e5ea; color: #333; margin-bottom: 8px; }
     .status-badge.listening { background: #34c759; color: white; }
+    .color-pick-group { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.85rem; }
+    .color-pick-group input[type="color"] { width: 45px; height: 32px; padding: 0; border: none; cursor: pointer; }
+    .option-checkboxes { display: flex; gap: 10px; font-size: 0.85rem; margin: 8px 0; flex-wrap: wrap; }
   </style>
 </head>
 <body>
@@ -43,61 +46,58 @@
     <div class="card">
       <label for="room-input">大屏房間碼 (PIN)：</label>
       <input type="text" id="room-input" placeholder="例如：839201">
-      <div id="remote-status" class="status-badge">📡 正在監聽大屏遙控訊號...</div>
+      <div id="remote-status" class="status-badge">📡 大屏遙控監聽中...</div>
     </div>
 
-    <!-- 模式選擇分頁 -->
+    <!-- 5 大獨立功能分頁 -->
     <div class="nav-tabs">
-      <button class="tab-btn active" onclick="switchTab('url-tab', this)">網址推送</button>
-      <button class="tab-btn" onclick="switchTab('camera-tab', this)">鏡頭與相冊</button>
-      <button class="tab-btn" id="physics-tab-btn" onclick="switchTab('physics-tab', this)">⚛️ 物理分析</button>
-      <button class="tab-btn" id="draw-tab-btn" onclick="switchTab('draw-tab', this)">畫筆標註</button>
-      <button class="tab-btn" onclick="switchTab('mic-tab', this)">麥克風</button>
+      <button class="tab-btn active" onclick="switchTab('tab-method1', this)">1.📁影片分析</button>
+      <button class="tab-btn" onclick="switchTab('tab-method2', this)">2.📐腳架去背</button>
+      <button class="tab-btn" onclick="switchTab('tab-method3', this)">3.🖥️大屏黑幕</button>
+      <button class="tab-btn" onclick="switchTab('tab-method4', this)">4.📍大屏藍點</button>
+      <button class="tab-btn" id="draw-tab-btn" onclick="switchTab('tab-draw', this)">🖼️相冊/標註</button>
     </div>
 
-    <!-- 1. 網址推送 -->
-    <div id="url-tab" class="tab-content active card">
-      <label for="url-input">貼上網址或 YouTube 連結：</label>
-      <input type="url" id="url-input" placeholder="https://example.com">
-      
-      <label for="url-name-input">網址自訂名稱（選填）：</label>
-      <input type="text" id="url-name-input" placeholder="例如：英語課開場影片">
+    <!-- 方案 1：預錄影片分析 (支援影片首幀去背) -->
+    <div id="tab-method1" class="tab-content active card">
+      <label>方法 1：📁 上傳預錄慢動作影片分析</label>
+      <button class="action-btn" style="background:#5856d6;" onclick="document.getElementById('video-file-input').click()">選擇影片檔案 (120/240 FPS)</button>
+      <input type="file" id="video-file-input" accept="video/*" style="display:none;" onchange="loadVideoFile(event)">
 
-      <label for="history-select" style="margin-top: 5px;">歷史推送紀錄：</label>
-      <select id="history-select" onchange="selectHistory(this.value)">
-        <option value="">-- 點擊選擇歷史網址 --</option>
-      </select>
-
-      <button class="action-btn" onclick="sendUrl()">推送至大屏</button>
-      <button style="width:100%; background:none; border:none; color:#8e8e93; font-size:0.75rem; margin-top:8px; cursor:pointer;" onclick="clearHistory()">清空歷史紀錄</button>
+      <button class="action-btn push-btn" style="margin-top:8px;" onclick="captureVideoFirstFrame()">📸 擷取影片第一幀為去背背景</button>
+      <button class="action-btn stop-btn" onclick="stopPhysicsAnalysis()">🛑 停止播放分析</button>
     </div>
 
-    <!-- 2. 鏡頭與相冊 -->
-    <div id="camera-tab" class="tab-content card">
+    <!-- 方案 2：腳架拍攝去背 -->
+    <div id="tab-method2" class="tab-content card">
+      <label>方法 2：📐 腳架靜態去背模式</label>
+      <button class="action-btn push-btn" onclick="manualStartPhysics('bgSub')">📸 開啟鏡頭並擷取背景去背</button>
+      <button class="action-btn stop-btn" onclick="stopPhysicsAnalysis()">🛑 停止分析</button>
+    </div>
+
+    <!-- 方案 3：大屏純黑幕 -->
+    <div id="tab-method3" class="tab-content card">
+      <label>方法 3：🖥️ 大屏黑幕模式 (由大屏控制倒數)</label>
+      <button class="action-btn" onclick="manualStartPhysics('bsBlack')">🎥 手動啟動黑幕分析</button>
+      <button class="action-btn stop-btn" onclick="stopPhysicsAnalysis()">🛑 停止分析</button>
+    </div>
+
+    <!-- 方案 4：大屏藍點基準 -->
+    <div id="tab-method4" class="tab-content card">
+      <label>方法 4：📍 大屏黑幕 + 藍點基準 (抗手晃)</label>
+      <div class="color-pick-group">
+        <span>🏀 球體顏色：</span><input type="color" id="ball-color" value="#ff3b30">
+        <span>📍 藍點基準：</span><input type="color" id="ref-color" value="#007aff">
+      </div>
+      <button class="action-btn" onclick="manualStartPhysics('bsRefPoint')">🎥 手動啟動藍點追蹤</button>
+      <button class="action-btn stop-btn" onclick="stopPhysicsAnalysis()">🛑 停止分析</button>
+    </div>
+
+    <!-- 方案 5：照片與畫筆標註 -->
+    <div id="tab-draw" class="tab-content card">
       <button class="action-btn" style="background: #5856d6; margin-bottom: 12px;" onclick="document.getElementById('gallery-input').click()">🖼️ 選擇手機相冊照片推送到大屏</button>
       <input type="file" id="gallery-input" accept="image/*" style="display:none;" onchange="handleGallerySelect(event)">
-      <p style="font-size: 0.8rem; color: #8e8e93; text-align: center; margin: 5px 0 10px 0;">— 或 —</p>
-      <button id="cam-start-btn" class="action-btn push-btn" onclick="startStandardCamera()">🎥 開啟手機全螢幕鏡頭</button>
-    </div>
 
-    <!-- 3. ⚛️ 物理運動分析 -->
-    <div id="physics-tab" class="tab-content card">
-      <p style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">您可以直接由大屏操控錄影，或由下方手動發起：</p>
-
-      <div style="display:flex; gap:8px; margin-bottom:10px;">
-        <button class="action-btn" style="flex:1; background:#007aff; margin:0;" onclick="manualStartPhysics('refPoint')">📷 手持基準點</button>
-        <button class="action-btn" style="flex:1; background:#5856d6; margin:0;" onclick="manualStartPhysics('bgSub')">📐 腳架去背幕</button>
-      </div>
-
-      <button class="action-btn stop-btn" onclick="stopPhysicsAnalysis()">🛑 停止物理分析</button>
-
-      <video id="physics-source-video" playsinline loop muted style="display:none;"></video>
-      <label style="margin-top:10px;">即時分析預覽：</label>
-      <canvas id="physics-output-canvas"></canvas>
-    </div>
-
-    <!-- 4. 畫筆標註 -->
-    <div id="draw-tab" class="tab-content card">
       <label id="draw-status-label">在畫布上手指滑動標註，大屏同步繪製：</label>
       <canvas id="draw-pad"></canvas>
       
@@ -116,11 +116,17 @@
       </div>
     </div>
 
-    <!-- 5. 麥克風 -->
-    <div id="mic-tab" class="tab-content card">
-      <p style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">聲音由大屏喇叭即時播報</p>
-      <button id="mic-start-btn" class="action-btn" onclick="startWebRTC('mic')">開啟無線麥克風</button>
-      <button id="mic-stop-btn" class="action-btn stop-btn" style="display:none;" onclick="stopWebRTC()">關閉麥克風</button>
+    <!-- 物理分析共用顯示與畫布 -->
+    <div class="card" id="physics-display-card">
+      <div class="option-checkboxes">
+        <label><input type="checkbox" id="show-ghost" checked> 殘影軌跡</label>
+        <label><input type="checkbox" id="show-v" checked> 速度 $\vec{v}$ (綠)</label>
+        <label><input type="checkbox" id="show-a" checked> 加速度 $\vec{a}$ (紅)</label>
+      </div>
+
+      <video id="physics-source-video" playsinline loop muted style="display:none;"></video>
+      <label>手機端分析預覽 (同步推送到大屏)：</label>
+      <canvas id="physics-output-canvas"></canvas>
     </div>
   </div>
 
@@ -153,10 +159,10 @@
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById(tabId).classList.add('active');
-      if (tabId === 'draw-tab') resizeDrawPad();
+      if (tabId === 'tab-draw') resizeDrawPad();
     };
 
-    /* 🌟 反向監聽：大屏遙控手機訊號 */
+    /* 反向監聽：大屏遙控手機 */
     document.getElementById('room-input').addEventListener('change', listenToRemoteControl);
     if (document.getElementById('room-input').value) listenToRemoteControl();
 
@@ -173,126 +179,47 @@
           statusBadge.innerText = '⏱️ 大屏倒數計時中，準備相機...';
           statusBadge.classList.add('listening');
           currentPhysicsMode = ctrl.mode;
-          // 自動幫手機打開物理分析頁籤並預熱相機
-          document.getElementById('physics-tab-btn').click();
           await preparePhysicsCamera();
         } else if (ctrl.state === 'recording') {
           statusBadge.innerText = '🎥 正在進行運動拍攝分析...';
-          if (currentPhysicsMode === 'bgSub') {
-            captureBackground(); // 倒數結束，大屏全黑，手機瞬間擷取背景！
+          if (currentPhysicsMode === 'bgSub' || currentPhysicsMode === 'bsBlack') {
+            captureBackground(); 
           }
           runPhysicsLoop();
         } else if (ctrl.state === 'stop') {
-          statusBadge.innerText = '📡 正在監聽大屏遙控訊號...';
+          statusBadge.innerText = '📡 大屏遙控監聽中...';
           statusBadge.classList.remove('listening');
           stopPhysicsAnalysis();
         }
       });
     }
 
-    /* 網址歷史紀錄 */
-    document.addEventListener('DOMContentLoaded', () => loadHistory());
-
-    function loadHistory() {
-      const history = JSON.parse(localStorage.getItem('pushedUrlHistory') || '[]');
-      const select = document.getElementById('history-select');
-      if (!select) return;
-      select.innerHTML = '<option value="">-- 點擊選擇歷史網址 --</option>';
-      history.forEach(item => {
-        const url = typeof item === 'object' ? item.url : item;
-        const name = (typeof item === 'object' && item.name) ? item.name : url;
-        const opt = document.createElement('option');
-        opt.value = url; opt.dataset.name = (typeof item === 'object' && item.name) ? item.name : '';
-        opt.textContent = name.length > 30 ? name.substring(0, 27) + '...' : name;
-        select.appendChild(opt);
-      });
-    }
-
-    function saveToHistory(url, name) {
-      if (!url) return;
-      let history = JSON.parse(localStorage.getItem('pushedUrlHistory') || '[]');
-      history = history.filter(item => (typeof item === 'object' ? item.url : item) !== url);
-      history.unshift({ url, name: name || '' });
-      if (history.length > 10) history = history.slice(0, 10);
-      localStorage.setItem('pushedUrlHistory', JSON.stringify(history));
-      loadHistory();
-    }
-
-    window.selectHistory = function(url) {
-      if (url) {
-        document.getElementById('url-input').value = url;
-        const select = document.getElementById('history-select');
-        const selectedOpt = select.options[select.selectedIndex];
-        document.getElementById('url-name-input').value = (selectedOpt && selectedOpt.dataset.name) ? selectedOpt.dataset.name : '';
-      }
-    };
-
-    window.clearHistory = function() {
-      if (confirm('確定要清空歷史網址嗎？')) {
-        localStorage.removeItem('pushedUrlHistory');
-        document.getElementById('url-name-input').value = '';
-        document.getElementById('url-input').value = '';
-        loadHistory();
-      }
-    };
-
-    window.sendUrl = function() {
-      const screenId = getScreenId(); if (!screenId) return;
-      stopPhysicsAnalysis(); stopWebRTC();
-      const url = document.getElementById('url-input').value.trim();
-      const name = document.getElementById('url-name-input').value.trim();
-      if (url) saveToHistory(url, name);
-      set(ref(db, 'screens/' + screenId), { mode: 'url', url: url, updatedAt: Date.now() });
-    };
-
-    /* 相冊與 WebRTC */
-    window.handleGallerySelect = function(e) {
+    /* 方法 1：預錄影片分析 */
+    window.loadVideoFile = function(e) {
+      stopPhysicsAnalysis();
       const file = e.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        const img = new Image();
-        img.onload = function() {
-          const canvas = document.createElement('canvas');
-          let w = img.width, h = img.height, maxDim = 1280;
-          if (w > maxDim || h > maxDim) {
-            if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
-            else { w = Math.round((w * maxDim) / h); h = maxDim; }
-          }
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-
-          stopPhysicsAnalysis(); stopWebRTC();
-          setPadBackground(dataUrl);
-
-          const screenId = getScreenId(); if (!screenId) return;
-          remove(ref(db, `screens/${screenId}/drawEvents`));
-          set(ref(db, 'screens/' + screenId), { mode: 'photo', photoUrl: dataUrl, updatedAt: Date.now() }).then(() => {
-            document.getElementById('draw-tab-btn').click();
-          });
-        };
-        img.src = evt.target.result;
+      const video = document.getElementById('physics-source-video');
+      video.srcObject = null;
+      video.src = URL.createObjectURL(file);
+      video.play();
+      video.onloadedmetadata = () => {
+        currentPhysicsMode = 'bgSub';
+        startPhysicsProcessing();
       };
-      reader.readAsDataURL(file);
     };
 
-    window.startStandardCamera = function() {
-      stopPhysicsAnalysis(); startWebRTC('camera');
+    window.captureVideoFirstFrame = function() {
+      captureBackground();
+      alert("✓ 已成功將影片第一幀設為去背背景！辨識精準度已極致提升。");
     };
 
+    /* WebRTC 串流 */
     window.startWebRTC = async function(type, streamOverride = null) {
       const screenId = getScreenId(); if (!screenId) return;
       try {
         remove(ref(db, 'screens/' + screenId));
-        if (streamOverride) {
-          localStream = streamOverride;
-        } else {
-          const constraints = type === 'camera' 
-            ? { video: { facingMode: "environment" }, audio: false }
-            : { video: false, audio: true };
-          localStream = await navigator.mediaDevices.getUserMedia(constraints);
-        }
+        localStream = streamOverride || await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
 
         peerConnection = new RTCPeerConnection(rtcConfig);
         localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
@@ -322,7 +249,7 @@
       if (peerConnection) { peerConnection.close(); peerConnection = null; }
     };
 
-    /* ⚛️ 物理運動分析處理 */
+    /* ⚛️ 物理運動分析處理核心 */
     let physicsAnimId = null;
     let bgImageData = null;
     let lastPos = null;
@@ -331,26 +258,20 @@
 
     async function preparePhysicsCamera() {
       const video = document.getElementById('physics-source-video');
-      if (!video.srcObject) {
+      if (!video.srcObject && !video.src) {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment", width: 640, height: 480 }, audio: false
         });
         video.srcObject = stream;
         await video.play();
-
-        const canvas = document.getElementById('physics-output-canvas');
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
-
-        const canvasStream = canvas.captureStream(30);
-        startWebRTC('camera', canvasStream);
       }
+      startPhysicsProcessing();
     }
 
     function captureBackground() {
       const video = document.getElementById('physics-source-video');
       const canvas = document.getElementById('physics-output-canvas');
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      canvas.width = video.videoWidth || 640; canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       bgImageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -362,6 +283,16 @@
       if (mode === 'bgSub') captureBackground();
       runPhysicsLoop();
     };
+
+    function startPhysicsProcessing() {
+      const video = document.getElementById('physics-source-video');
+      const canvas = document.getElementById('physics-output-canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+
+      const canvasStream = canvas.captureStream(30);
+      startWebRTC('camera', canvasStream);
+    }
 
     function runPhysicsLoop() {
       const video = document.getElementById('physics-source-video');
@@ -383,12 +314,14 @@
         const currData = currentFrame.data;
         const now = performance.now() / 1000;
 
-        if (currentPhysicsMode === 'refPoint') {
-          /* A. 📷 藍點基準模式 (藍點由大屏提供) */
+        if (currentPhysicsMode === 'bsRefPoint') {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-          const ballPos = findColorCentroid(currData, '#ff3b30', canvas.width, canvas.height);
-          const refPos = findColorCentroid(currData, '#007aff', canvas.width, canvas.height); // 鎖定大屏上的藍點
+          const ballHex = document.getElementById('ball-color').value;
+          const refHex = document.getElementById('ref-color').value;
+
+          const ballPos = findColorCentroid(currData, ballHex, canvas.width, canvas.height);
+          const refPos = findColorCentroid(currData, refHex, canvas.width, canvas.height);
 
           if (refPos) {
             ctx.beginPath(); ctx.arc(refPos.x, refPos.y, 8, 0, Math.PI * 2);
@@ -409,9 +342,12 @@
               if (dt > 0.015) {
                 const vx = (realX - lastPos.realX) / dt;
                 const vy = (realY - lastPos.realY) / dt;
-                drawVector(ctx, ballPos.x, ballPos.y, ballPos.x + vx * 0.12, ballPos.y + vy * 0.12, '#00ff00', 'v');
 
-                if (lastVel) {
+                if (document.getElementById('show-v').checked) {
+                  drawVector(ctx, ballPos.x, ballPos.y, ballPos.x + vx * 0.12, ballPos.y + vy * 0.12, '#00ff00', 'v');
+                }
+
+                if (lastVel && document.getElementById('show-a').checked) {
                   const ax = (vx - lastVel.vx) / dt;
                   const ay = (vy - lastVel.vy) / dt;
                   drawVector(ctx, ballPos.x, ballPos.y, ballPos.x + ax * 0.02, ballPos.y + ay * 0.02, '#ff3b30', 'a');
@@ -426,7 +362,6 @@
           }
 
         } else {
-          /* B. 📐 純黑背景相減去背模式 (背景由大屏提供) */
           let sumX = 0, sumY = 0, count = 0;
           const threshold = 45;
 
@@ -461,9 +396,12 @@
               if (dt > 0.015) {
                 const vx = (cx - lastPos.x) / dt;
                 const vy = (cy - lastPos.y) / dt;
-                drawVector(ctx, cx, cy, cx + vx * 0.12, cy + vy * 0.12, '#00ff00', 'v');
 
-                if (lastVel) {
+                if (document.getElementById('show-v').checked) {
+                  drawVector(ctx, cx, cy, cx + vx * 0.12, cy + vy * 0.12, '#00ff00', 'v');
+                }
+
+                if (lastVel && document.getElementById('show-a').checked) {
                   const ax = (vx - lastVel.vx) / dt;
                   const ay = (vy - lastVel.vy) / dt;
                   drawVector(ctx, cx, cy, cx + ax * 0.02, cy + ay * 0.02, '#ff3b30', 'a');
@@ -478,12 +416,14 @@
           }
         }
 
-        ghostHistory.forEach((pt, idx) => {
-          ctx.beginPath();
-          ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(255, 255, 255, ${ (idx + 1) / ghostHistory.length })`;
-          ctx.fill();
-        });
+        if (document.getElementById('show-ghost').checked) {
+          ghostHistory.forEach((pt, idx) => {
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 255, ${ (idx + 1) / ghostHistory.length })`;
+            ctx.fill();
+          });
+        }
 
         physicsAnimId = requestAnimationFrame(loop);
       }
@@ -532,7 +472,36 @@
       bgImageData = null; lastPos = null; lastVel = null; ghostHistory = [];
     };
 
-    /* 畫筆與標註頁籤 */
+    /* 相冊與畫筆標註 */
+    window.handleGallerySelect = function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          let w = img.width, h = img.height, maxDim = 1280;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+            else { w = Math.round((w * maxDim) / h); h = maxDim; }
+          }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+
+          stopPhysicsAnalysis(); stopWebRTC();
+          setPadBackground(dataUrl);
+
+          const screenId = getScreenId(); if (!screenId) return;
+          remove(ref(db, `screens/${screenId}/drawEvents`));
+          set(ref(db, 'screens/' + screenId), { mode: 'photo', photoUrl: dataUrl, updatedAt: Date.now() });
+        };
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+
     function setPadBackground(url) {
       const pad = document.getElementById('draw-pad');
       if (url) {
