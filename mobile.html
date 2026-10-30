@@ -194,20 +194,29 @@
       });
     }
 
-    /* 方法 1：預錄影片分析 */
-    window.loadVideoFile = function(e) {
-      stopPhysicsAnalysis();
-      const file = e.target.files[0];
-      if (!file) return;
-      const video = document.getElementById('physics-source-video');
-      video.srcObject = null;
-      video.src = URL.createObjectURL(file);
-      video.play();
-      video.onloadedmetadata = () => {
-        currentPhysicsMode = 'bgSub';
-        startPhysicsProcessing();
-      };
-    };
+   /* 方法 1：預錄影片分析 (優化版：防止 4K 卡死與轉圈) */
+window.loadVideoFile = function(e) {
+  stopPhysicsAnalysis();
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const video = document.getElementById('physics-source-video');
+  video.srcObject = null;
+  video.src = URL.createObjectURL(file);
+  video.muted = true;
+  video.playsInline = true;
+
+  video.onloadedmetadata = async () => {
+    try {
+      // 確保影片能順利啟動播放
+      await video.play();
+      currentPhysicsMode = 'bgSub';
+      startPhysicsProcessing();
+    } catch(err) {
+      alert("影片自動播放被手機阻擋，請手動允許播放：" + err.message);
+    }
+  };
+};
 
     window.captureVideoFirstFrame = function() {
       captureBackground();
@@ -285,14 +294,28 @@
     };
 
     function startPhysicsProcessing() {
-      const video = document.getElementById('physics-source-video');
-      const canvas = document.getElementById('physics-output-canvas');
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+  const video = document.getElementById('physics-source-video');
+  const canvas = document.getElementById('physics-output-canvas');
+  
+  // 🌟 關鍵修正：壓縮運算解析度至 640px 以內，防止 4K/240FPS 卡死 JavaScript
+  let w = video.videoWidth || 640;
+  let h = video.videoHeight || 480;
+  const maxDim = 640;
+  if (w > maxDim || h > maxDim) {
+    if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+    else { w = Math.round((w * maxDim) / h); h = maxDim; }
+  }
+  
+  canvas.width = w;
+  canvas.height = h;
 
-      const canvasStream = canvas.captureStream(30);
-      startWebRTC('camera', canvasStream);
-    }
+  // 確保 Canvas 有第一幀內容後再建立 WebRTC 串流
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const canvasStream = canvas.captureStream(30);
+  startWebRTC('camera', canvasStream);
+}
 
     function runPhysicsLoop() {
       const video = document.getElementById('physics-source-video');
